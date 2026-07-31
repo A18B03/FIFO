@@ -1,0 +1,170 @@
+module sync_fifo #(parameter WIDTH = 8, DEPTH = 8)
+  (input clk,rst,read,write,
+   input [WIDTH-1:0]din,
+   output reg [WIDTH - 1:0]dout,
+   output reg fifo_full,
+   output reg fifo_empty);
+  reg [$clog2(DEPTH)-1:0]rd_ptr;
+  reg [$clog2(DEPTH)-1:0]wr_ptr;
+  reg[$clog2(DEPTH):0]status_counter;
+  
+  reg [WIDTH-1: 0] mem [DEPTH-1:0];
+  always@(posedge clk)begin
+    fifo_empty <= (status_counter == 0);
+    fifo_full <= (status_counter == DEPTH);
+  end
+  always@(posedge clk or negedge rst)begin
+    if(!rst)
+      begin
+       rd_ptr <= 0;
+       wr_ptr <= 0;
+       status_counter <= 0;
+       fifo_full <= 0;
+       fifo_empty <= 1;
+    end
+  else
+    begin
+      if(write && !fifo_full)
+        begin
+        mem[wr_ptr] <= din;
+        wr_ptr <= wr_ptr+1;
+        status_counter <= status_counter+1;
+    end 
+   end
+  end
+  
+  always@(posedge clk)begin
+    if(read && !fifo_empty)begin
+      dout <= mem[rd_ptr];
+    rd_ptr <= rd_ptr + 1;
+    status_counter <= status_counter-1;
+  end
+  end
+endmodule
+
+//testbench
+module testbench;
+
+parameter WIDTH = 8;
+parameter DEPTH = 8;
+
+reg clk, rst, read, write;
+reg [WIDTH-1:0] din;
+
+wire [WIDTH-1:0] dout;
+wire fifo_full, fifo_empty;
+
+sync_fifo #(WIDTH, DEPTH) uut (
+    .clk(clk),
+    .rst(rst),
+    .read(read),
+    .write(write),
+    .din(din),
+    .dout(dout),
+    .fifo_full(fifo_full),
+    .fifo_empty(fifo_empty)
+);
+
+
+always #5 clk = ~clk;
+
+
+initial
+begin
+    clk = 0;
+    rst = 0;
+    read = 0;
+    write = 0;
+    din = 0;
+
+    
+    #10 rst = 1;
+
+   
+    $display("FIFO_FULL TEST");
+
+    repeat(DEPTH)
+    begin
+        @(posedge clk);
+        write = 1;
+        din = din + 1;
+    end
+
+    @(posedge clk);
+    write = 0;
+
+   
+    $display("FIFO_EMPTY TEST");
+
+    repeat(DEPTH)
+    begin
+        @(posedge clk);
+        read = 1;
+    end
+
+    @(posedge clk);
+    read = 0;
+
+   
+    $display("SEQ_WR_RD TEST");
+
+    repeat(4)
+    begin
+        @(posedge clk);
+        write = 1;
+        din = din + 1;
+    end
+
+    @(posedge clk);
+    write = 0;
+
+    repeat(4)
+    begin
+        @(posedge clk);
+        read = 1;
+    end
+
+    @(posedge clk);
+    read = 0;
+
+   
+    
+  
+    $display("RANDOM_WR_RD TEST");
+
+    @(posedge clk);
+    write = 1;
+    din = 8'hAA;
+
+    @(posedge clk);
+    write = 0;
+    read = 1;
+
+    @(posedge clk);
+    read = 0;
+
+    @(posedge clk);
+    write = 1;
+    din = 8'h55;
+
+    @(posedge clk);
+    write = 0;
+
+    @(posedge clk);
+    read = 1;
+
+    @(posedge clk);
+    read = 0;
+
+    #20;
+    $finish;
+end
+
+
+initial
+begin
+    $monitor("Time=%0t clk=%b rst=%b write=%b read=%b din=%h dout=%h full=%b empty=%b",
+             $time, clk, rst, write, read, din, dout, fifo_full, fifo_empty);
+end
+
+endmodule
